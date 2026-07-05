@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>氣象署OPEN DATA即時觀測資料地圖</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{--bg:#0b1220;--card:#16213a;--line:#2a3a57;--txt:#e6edf6;--muted:#9fb0c8;--accent:#3b82f6;--chip:#1e293b}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Segoe UI","Microsoft JhengHei",system-ui,sans-serif;color:var(--txt);font-size:14px}
+  #map{position:absolute;inset:0;background:#0b1220}
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--card);color:var(--txt);border:1px solid var(--line)}
+  .leaflet-popup-content{margin:12px 14px;font-size:13px;line-height:1.55}
+  .windarrow{background:none;border:none}
+  .windarrow svg{filter:drop-shadow(0 0 1px rgba(0,0,0,.6))}
+  .pop h3{margin:0 0 6px;font-size:15px}
+  .pop .row{display:flex;justify-content:space-between;gap:18px}
+  .pop .k{color:var(--muted)} .pop .big{font-size:20px;font-weight:700;color:#fff}
+
+  /* 控制面板 */
+  .panel{position:absolute;top:12px;left:12px;z-index:1000;background:rgba(16,24,42,.94);
+    border:1px solid var(--line);border-radius:12px;padding:14px;width:290px;backdrop-filter:blur(6px)}
+  .panel h1{margin:0 0 2px;font-size:16px}
+  .panel .sub{color:var(--muted);font-size:11px;margin-bottom:10px}
+  label{display:block;font-size:11px;color:var(--muted);margin:8px 0 4px;font-weight:600}
+  select,input{width:100%;padding:7px 8px;background:#0d1526;color:var(--txt);border:1px solid var(--line);border-radius:7px;font-size:13px}
+  .btns{display:flex;gap:8px;margin-top:10px}
+  button{flex:1;padding:7px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:12px;cursor:pointer;font-weight:600}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+  button:hover{filter:brightness(1.12)}
+  .chip{display:block;margin-top:9px;font-size:11px;color:var(--muted)}
+  .chip.time{color:#e6edf6;font-weight:600}
+
+  /* 面板 / 圖例 縮小切換 */
+  .phead{display:flex;align-items:center;gap:8px}
+  .phead h1{flex:1;margin:0}
+  .mini{flex:0 0 auto;width:26px;height:26px;padding:0;background:transparent;border:1px solid var(--line);
+    color:var(--muted);border-radius:6px;font-size:14px;line-height:1;cursor:pointer;font-weight:700}
+  .mini:hover{color:var(--txt);border-color:var(--accent);filter:none}
+  .panel.collapsed{width:auto;padding:8px 10px}
+  .panel.collapsed .pbody{display:none}
+  .panel.collapsed .phead h1{font-size:14px}
+  .panel.dock-right{left:auto;right:12px}
+  .legend.collapsed{width:auto;padding:8px 10px}
+  .legend.collapsed .lbody{display:none}
+  .lhead{display:flex;align-items:center;gap:8px}
+  .lhead .title{flex:1;margin-bottom:0}
+
+  /* 浮動資訊盒（雷達控制 / 讀值） */
+  .fbox{position:absolute;z-index:1000;background:rgba(16,24,42,.94);border:1px solid var(--line);
+    border-radius:12px;padding:10px 12px;backdrop-filter:blur(6px)}
+  .fbox .bhead{display:flex;align-items:center;gap:8px}
+  .fbox .bhead .btitle{flex:1;font-size:12px;font-weight:700}
+  .fbox.collapsed{padding:8px 10px}
+  .fbox.collapsed .bbody{display:none}
+  #radarBox{bottom:22px;left:12px;width:200px}
+  input[type=range]{padding:0;height:22px;background:transparent;border:none;accent-color:var(--accent)}
+  @media(max-width:520px){#radarBox{width:180px}}
+
+  /* colorbar 圖例 */
+  .legend{position:absolute;bottom:22px;right:12px;z-index:1000;background:rgba(16,24,42,.94);
+    border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:230px}
+  .legend .title{font-size:12px;font-weight:700;margin-bottom:8px}
+  .bar{height:14px;border-radius:4px;border:1px solid var(--line)}
+  .ticks{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px}
+  .legend .na{font-size:11px;color:var(--muted);margin-top:8px;display:flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:50%;background:#7a8aa3;border:1px solid #fff;display:inline-block}
+  .loader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(11,18,32,.7);z-index:2000;color:var(--muted);font-size:15px}
+  @media(max-width:520px){.panel{width:min(230px,calc(100% - 24px))}.legend{width:160px}}
+
+  /* ===== API 金鑰輸入畫面 ===== */
+  #gate{position:fixed;inset:0;z-index:3000;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1200px 600px at 50% -10%,#12203c,#0b1220)}
+  #gate .box{width:min(420px,calc(100% - 32px));background:var(--card);border:1px solid var(--line);
+    border-radius:16px;padding:26px 24px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  #gate h1{margin:0 0 4px;font-size:20px}
+  #gate .sub{color:var(--muted);font-size:12px;margin-bottom:18px;line-height:1.5}
+  #gate label{margin-top:0}
+  #gate .keyrow{display:flex;gap:8px}
+  #gate .keyrow input{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  #gate .toggle{flex:0 0 auto;width:44px;padding:7px;background:transparent;border:1px solid var(--line);color:var(--muted)}
+  #gate .remember{display:flex;align-items:center;gap:7px;margin-top:12px;font-size:12px;color:var(--muted);cursor:pointer}
+  #gate .remember input{width:auto}
+  #gate .go{width:100%;margin-top:16px;padding:11px;font-size:14px}
+  #gate .err{color:#fca5a5;font-size:12px;margin-top:10px;display:none}
+  #gate .hint{color:var(--muted);font-size:11px;margin-top:14px;line-height:1.5}
+  #gate a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- ===== 進入前：先輸入 API 金鑰 ===== -->
+<div id="gate">
+  <div class="box">
+    <h1>🔑 氣象署OPEN DATA即時觀測資料地圖</h1>
+    <div class="sub">本地圖使用中央氣象署（CWA）開放資料。請先輸入您的 API 授權碼（Authorization key）以載入即時觀測資料。</div>
+    <label for="keyInput">CWA API 授權碼</label>
+    <div class="keyrow">
+      <input id="keyInput" type="password" placeholder="CWA-XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" autocomplete="off" spellcheck="false">
+      <button type="button" class="toggle" id="keyToggle" title="顯示 / 隱藏">👁</button>
+    </div>
+    <label class="remember"><input type="checkbox" id="rememberKey"> 記住金鑰（儲存在此瀏覽器）</label>
+    <button class="go" id="enterBtn">進入地圖 →</button>
+    <div class="err" id="keyErr"></div>
+    <div class="hint">尚無金鑰？可至
+      <a href="https://opendata.cwa.gov.tw/user/authkey" target="_blank" rel="noopener">氣象署開放資料平臺</a>
+      免費申請會員並取得授權碼。金鑰僅在您的瀏覽器中使用，不會上傳。</div>
+  </div>
+</div>
+
+<div id="map"></div>
+<div id="loader" class="loader">⏳ 載入氣象署即時資料中…</div>
+
+<div class="panel" id="panel">
+  <div class="phead">
+    <h1>🗺️ 氣象站觀測地圖</h1>
+    <button type="button" class="mini" id="panelSide" title="切換靠左 / 靠右">⇄</button>
+    <button type="button" class="mini" id="panelToggle" title="縮小 / 展開面板">−</button>
+  </div>
+  <div class="pbody">
+  <div class="sub">中央氣象署 O-A0003-001 / O-A0002-001 / O-A0091-001 即時觀測</div>
+  <span class="chip time" id="obsTime">🕒 資料時間：—</span>
+  <label>觀測變數</label>
+  <select id="varSel"></select>
+  <label>縣市</label>
+  <select id="countySel"><option value="">全部（縮放至全臺）</option></select>
+  <label>測站搜尋（名稱 / 站號）</label>
+  <input id="search" placeholder="例如：臺北、466920…">
+  <label>底圖</label>
+  <select id="baseSel">
+    <option value="osm">街道圖 (OSM)</option>
+    <option value="sat">衛星影像 (類 Google Earth)</option>
+    <option value="topo">地形圖</option>
+    <option value="dark">深色圖</option>
+    <option value="light">淺色圖</option>
+  </select>
+  <label>雷達疊加圖層</label>
+  <select id="radarSel">
+    <option value="">無</option>
+    <option value="echo">雷達整合回波 (O-A0059-001)</option>
+    <option value="qpe">雷達估計降雨 (O-B0045-001)</option>
+  </select>
+  <div class="btns">
+    <button id="reload">↻ 重新整理</button>
+    <button class="ghost" id="fit">⤢ 重置視角</button>
+  </div>
+  <div class="btns">
+    <button class="ghost" id="changeKey">🔑 更換金鑰</button>
+  </div>
+  <span class="chip" id="info">—</span>
+  </div><!-- /pbody -->
+</div>
+
+<div class="legend" id="legend">
+  <div class="lhead">
+    <div class="title" id="legTitle">—</div>
+    <button type="button" class="mini" id="legToggle" title="縮小 / 展開圖例">−</button>
+  </div>
+  <div class="lbody">
+  <div class="bar" id="legBar"></div>
+  <div class="ticks" id="legTicks"></div>
+  <div id="legNote" style="font-size:11px;color:var(--muted);margin-top:7px;display:none"></div>
+  <div class="na"><span class="dot"></span> 無觀測值 / 缺測</div>
+  </div><!-- /lbody -->
+</div>
+
+<!-- 雷達圖層控制（左下） -->
+<div class="fbox" id="radarBox">
+  <div class="bhead">
+    <div class="btitle">🌀 雷達圖層</div>
+    <button type="button" class="mini" id="radarBoxToggle" title="縮小 / 展開">−</button>
+  </div>
+  <div class="bbody">
+    <label>透明度 <span id="radarOpV">75%</span></label>
+    <input type="range" id="radarOp" min="0" max="100" value="75" style="width:100%">
+    <span class="chip" id="radarStat">未啟用</span>
+    <span class="chip" id="radarTime"></span>
+    <!-- 游標 / 點擊讀值 -->
+    <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:6px">
+      <div style="font-size:11px;color:var(--muted);font-weight:600">📍 游標 / 點擊讀值</div>
+      <div id="posLL" style="font-size:13px;font-weight:700;margin-top:4px">—</div>
+      <div id="posVal" style="font-size:13px;margin-top:2px;color:var(--muted)">（未啟用雷達圖層）</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== API 金鑰：進入頁面時輸入，之後才建立 API 網址 =====
+let KEY="", API="", API_RAIN="", API_SUN="";
+const STORE="cwa_api_key";
+function setKey(k){
+  KEY=k.trim();
+  API     ="https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization="+encodeURIComponent(KEY)+"&format=JSON"; // 綜觀氣象
+  API_RAIN="https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization="+encodeURIComponent(KEY)+"&format=JSON"; // 雨量站
+  API_SUN ="https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/O-A0091-001?Authorization="+encodeURIComponent(KEY)+"&downloadType=WEB&format=JSON"; // 署屬氣象站日射量
+}
+
+const NA=v=>v===null||v===undefined||v===""||v==="X"||v==="-99"||v==="-990"||v==="-99.0"||v==="-990.0"||(typeof v==="number"&&v<=-90);
+const num=v=>NA(v)?null:(isNaN(parseFloat(v))?null:parseFloat(v));
+const rget=(s,k)=>num(s.RainfallElement?.[k]?.Precipitation);  // 雨量站累積雨量
+// 日射量：容錯多種欄位路徑（O-A0091-001 檔案型資料）
+const sunVal=s=>num(s.WeatherElement?.SolarRadiation ?? s.weatherElement?.SolarRadiation ?? s.SolarRadiation);
+
+// ===== 離散（分級）色階 =====
+const rgb=a=>`rgb(${a[0]},${a[1]},${a[2]})`;
+
+// 雨量：CWB / NCL 標準色階（17 色，16 級門檻）
+const RAIN_COLORS=[[193,193,193],[155,255,255],[0,207,255],[1,152,255],[1,101,255],
+  [48,153,1],[50,255,0],[248,255,0],[255,203,0],[255,154,0],[250,3,0],[204,0,3],
+  [160,0,0],[152,0,154],[195,4,204],[248,5,243],[254,203,255]];
+const RAIN_LEVELS=[1,2,6,10,15,20,30,40,50,70,90,110,130,150,200,300];
+
+// 溫度：CWB 溫度分布圖色階（攝氏，每 2℃ 一級，20 色 / 19 門檻）
+const TEMP_COLORS=[[0,150,160],[0,188,196],[0,206,168],[86,216,128],[0,176,80],
+  [90,205,75],[150,218,95],[200,233,135],[228,243,170],[245,248,195],
+  [252,247,180],[254,240,140],[255,225,100],[255,205,65],[255,170,40],
+  [255,135,20],[245,70,28],[220,18,18],[165,0,0],[165,0,165]];
+const TEMP_LEVELS=[1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37];
+
+// 取值上色（離散優先，否則用連續 ramp）
+function colorFor(v,def){
+  if(def.levels){
+    const L=def.levels,C=def.colors;
+    if(v<L[0])return rgb(C[0]);
+    for(let i=0;i<L.length;i++){if(v<L[i])return rgb(C[i]);}
+    return rgb(C[L.length]);
+  }
+  return colorAt(def.ramp,v);
+}
+
+// 連續色階：stops = [[value,'#hex'],...]
+const RAMP={
+  humid:[[20,'#fff7bc'],[50,'#7fcdbb'],[75,'#41b6c4'],[90,'#225ea8'],[100,'#081d58']],
+  pres:[[980,'#5e4fa2'],[1000,'#3288bd'],[1010,'#abdda4'],[1015,'#fee08b'],[1025,'#f46d43'],[1040,'#9e0142']],
+  wind:[[0,'#edf8fb'],[3,'#b2e2e2'],[6,'#66c2a4'],[10,'#2ca25f'],[15,'#006d2c'],[25,'#e31a1c']],
+  dir:[[0,'#4575b4'],[90,'#91bfdb'],[180,'#fee090'],[270,'#fc8d59'],[360,'#4575b4']],
+  sun:[[0,'#08306b'],[2,'#4292c6'],[5,'#fdae6b'],[8,'#f16913'],[12,'#7f2704']],
+  solar:[[0,'#10184a'],[5,'#3288bd'],[10,'#7fcdbb'],[15,'#fee08b'],[20,'#fdae61'],[25,'#f46d43'],[30,'#9e0142']]
+};
+const VARS=[
+  {key:"AirTemperature",label:"氣溫",unit:"°C",levels:TEMP_LEVELS,colors:TEMP_COLORS,get:s=>num(s.WeatherElement?.AirTemperature)},
+  {key:"Rain1hr",label:"降水（時雨量）",unit:"mm",src:"rain",levels:RAIN_LEVELS,colors:RAIN_COLORS,get:s=>rget(s,"Past1hr")},
+  {key:"WindVector",label:"風向＋風速（箭號）",unit:"m/s",ramp:RAMP.wind,wind:true,get:s=>num(s.WeatherElement?.WindSpeed)},
+  {key:"AirPressure",label:"氣壓",unit:"hPa",ramp:RAMP.pres,get:s=>num(s.WeatherElement?.AirPressure)},
+  {key:"PeakGustSpeed",label:"最大陣風",unit:"m/s",ramp:RAMP.wind,get:s=>num(s.WeatherElement?.GustInfo?.PeakGustSpeed)},
+  {key:"RainNow",label:"當前降水量",unit:"mm",src:"rain",levels:RAIN_LEVELS,colors:RAIN_COLORS,get:s=>rget(s,"Now")},
+  {key:"RelativeHumidity",label:"相對濕度",unit:"%",ramp:RAMP.humid,get:s=>num(s.WeatherElement?.RelativeHumidity)},
+  {key:"Rain3hr",label:"3小時累積雨量",unit:"mm",src:"rain",levels:RAIN_LEVELS,colors:RAIN_COLORS,get:s=>rget(s,"Past3hr")},
+  {key:"Rain6hr",label:"6小時累積雨量",unit:"mm",src:"rain",levels:RAIN_LEVELS,colors:RAIN_COLORS,get:s=>rget(s,"Past6Hr")},
+  {key:"Rain12hr",label:"12小時累積雨量",unit:"mm",src:"rain",levels:RAIN_LEVELS,colors:RAIN_COLORS,get:s=>rget(s,"Past12hr")},
+  {key:"Rain24hr",label:"24小時累積雨量",unit:"mm",src:"rain",levels:RAIN_LEVELS,colors:RAIN_COLORS,get:s=>rget(s,"Past24hr")},
+  {key:"WindSpeed",label:"風速",unit:"m/s",ramp:RAMP.wind,get:s=>num(s.WeatherElement?.WindSpeed)},
+  {key:"WindDirection",label:"風向",unit:"°",ramp:RAMP.dir,wind:true,get:s=>num(s.WeatherElement?.WindDirection)},
+  {key:"DailyHigh",label:"日最高溫",unit:"°C",levels:TEMP_LEVELS,colors:TEMP_COLORS,get:s=>num(s.WeatherElement?.DailyExtreme?.DailyHigh?.TemperatureInfo?.AirTemperature)},
+  {key:"DailyLow",label:"日最低溫",unit:"°C",levels:TEMP_LEVELS,colors:TEMP_COLORS,get:s=>num(s.WeatherElement?.DailyExtreme?.DailyLow?.TemperatureInfo?.AirTemperature)},
+  {key:"SunshineDuration",label:"日照時數",unit:"hr",ramp:RAMP.sun,get:s=>num(s.WeatherElement?.SunshineDuration)},
+  {key:"SolarRadiation",label:"日射量",unit:"MJ/m²",src:"sun",ramp:RAMP.solar,get:s=>sunVal(s)},
+];
+
+// 色彩內插
+function hex2rgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+function colorAt(ramp,v){
+  if(v<=ramp[0][0])return ramp[0][1];
+  if(v>=ramp[ramp.length-1][0])return ramp[ramp.length-1][1];
+  for(let i=0;i<ramp.length-1;i++){
+    const[a,ca]=ramp[i],[b,cb]=ramp[i+1];
+    if(v>=a&&v<=b){const t=(v-a)/(b-a);const A=hex2rgb(ca),B=hex2rgb(cb);
+      return`rgb(${A.map((x,j)=>Math.round(x+(B[j]-x)*t)).join(",")})`;}
+  }
+  return ramp[ramp.length-1][1];
+}
+function gradientCSS(ramp){
+  const lo=ramp[0][0],hi=ramp[ramp.length-1][0];
+  return"linear-gradient(90deg,"+ramp.map(s=>`${s[1]} ${((s[0]-lo)/(hi-lo)*100).toFixed(1)}%`).join(",")+")";
+}
+
+// 台灣本島預設範圍（不含離島）
+const TAIWAN=L.latLngBounds([21.85,119.95],[25.35,122.05]);
+const map=L.map("map",{zoomControl:true}).fitBounds(TAIWAN);
+const BASES={
+  osm:L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}),
+  sat:L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Esri World Imagery"}),
+  topo:L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{maxZoom:17,attribution:"© OpenTopoMap"}),
+  dark:L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{maxZoom:20,attribution:"© CARTO"}),
+  light:L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{maxZoom:20,attribution:"© CARTO"})
+};
+let curBase=BASES.osm.addTo(map);
+const layer=L.layerGroup().addTo(map);
+
+let RAW=[],RAIN=[],SUN=[],rainById={},weatherById={},sunById={},bounds=null,refZoom=null;
+// 以「台灣本島全圖」的縮放層級為基準，放大時標示緩慢放大（指數 0.45、上限 2.6 倍）
+// → 放大檢視時標示相對地圖變小，避免互相遮擋
+function sizeScale(){
+  if(refZoom===null)refZoom=map.getBoundsZoom(TAIWAN);
+  return Math.max(0.7,Math.min(2.6,Math.pow(2,(map.getZoom()-refZoom)*0.45)));
+}
+const $=id=>document.getElementById(id);
+VARS.forEach(v=>{const o=document.createElement("option");o.value=v.key;o.textContent=`${v.label} (${v.unit})`;$("varSel").appendChild(o);});
+function curVar(){return VARS.find(v=>v.key===$("varSel").value)||VARS[0];}
+
+function wgs84(s){
+  let cs=s.GeoInfo?.Coordinates||[];
+  if(!Array.isArray(cs))cs=[cs];                 // 檔案型資料可能為單一物件
+  const c=cs.find(x=>x?.CoordinateName==="WGS84")||cs[0];
+  if(!c)return null;const la=parseFloat(c.StationLatitude),lo=parseFloat(c.StationLongitude);
+  return(isFinite(la)&&isFinite(lo))?[la,lo]:null;
+}
+
+// O-A0091-001（檔案型 fileapi）測站清單解析：容錯多種 JSON 包裝結構
+function sunStations(j){
+  let st=j?.cwaopendata?.dataset?.Station
+      || j?.cwaopendata?.resources?.resource?.data?.Station
+      || j?.cwaopendata?.Station
+      || j?.records?.Station
+      || j?.dataset?.Station
+      || [];
+  if(st&&!Array.isArray(st))st=[st];
+  return st||[];
+}
+
+async function load(){
+  if(!KEY){openGate();return;}
+  $("loader").style.display="flex";
+  try{
+    const jw=await fetch(API).then(r=>r.json());
+    // 授權失敗偵測：CWA 會回傳非 success 或 401
+    if(jw&&jw.success==="false"){
+      throw new Error("金鑰無效或未授權，請確認 API 授權碼");
+    }
+    const jr=await fetch(API_RAIN).then(r=>r.json()).catch(()=>null);   // 雨量站（失敗不影響主圖）
+    const js=await fetch(API_SUN).then(r=>r.json()).catch(()=>null);    // 日射量（失敗不影響主圖）
+    RAW=jw?.records?.Station||[];
+    RAIN=jr?.records?.Station||[];
+    SUN=sunStations(js);
+    if(!RAW.length&&!RAIN.length){throw new Error("查無資料，請確認金鑰是否正確");}
+    weatherById={};RAW.forEach(s=>weatherById[s.StationId]=s);
+    rainById={};RAIN.forEach(s=>rainById[s.StationId]=s);
+    sunById={};SUN.forEach(s=>sunById[s.StationId]=s);
+    // 日射量資料無縣市欄位 → 由同站號之綜觀氣象站補上，讓縣市篩選可用
+    SUN.forEach(s=>{
+      s.GeoInfo=s.GeoInfo||{};
+      const w=weatherById[s.StationId];
+      if(!s.GeoInfo.CountyName&&w?.GeoInfo?.CountyName){
+        s.GeoInfo.CountyName=w.GeoInfo.CountyName;
+        s.GeoInfo.TownName=s.GeoInfo.TownName||w.GeoInfo.TownName;
+      }
+      if(!s.GeoInfo.StationAltitude&&w?.GeoInfo?.StationAltitude)s.GeoInfo.StationAltitude=w.GeoInfo.StationAltitude;
+    });
+    const counties=[...new Set([...RAW,...RAIN,...SUN].map(s=>s.GeoInfo?.CountyName).filter(Boolean))].sort();
+    $("countySel").innerHTML='<option value="">全部（縮放至全臺）</option>'+counties.map(c=>`<option>${c}</option>`).join("");
+    // 資料時間：以 O-A0003-001（綜觀氣象站）為主
+    const t=RAW[0]?.ObsTime?.DateTime;
+    $("obsTime").textContent="🕒 資料時間："+(t?new Date(t).toLocaleString("zh-TW"):"—")
+      +`（O-A0003-001 ‧ 氣象站 ${RAW.length} ‧ 雨量站 ${RAIN.length} ‧ 日射 ${SUN.length}）`;
+    render(true);
+  }catch(e){
+    $("info").textContent="載入失敗："+e.message;
+    // 若尚未成功載入任何資料，退回金鑰輸入畫面
+    if(!RAW.length&&!RAIN.length){openGate("載入失敗："+e.message);}
+  }
+  $("loader").style.display="none";
+}
+
+function buildPopup(s,v,val,color){
+  const id=s.StationId, geo=s.GeoInfo||{};
+  const w=weatherById[id]||(s.WeatherElement?s:null);   // 氣象觀測
+  const r=rainById[id]||(s.RainfallElement?s:null);      // 雨量觀測
+  const su=sunById[id]||null;                             // 日射量觀測
+  const we=w?.WeatherElement||{};
+  const disp=val===null?"無資料":val.toLocaleString("zh-TW",{maximumFractionDigits:1})+" "+v.unit;
+  const row=(k,val)=>`<div class="row"><span class="k">${k}</span><span>${val}</span></div>`;
+  let html=`<div class="pop"><h3>${s.StationName||""} <small style="color:#9fb0c8">${id||""}</small></h3>
+    <div class="row"><span class="k">${v.label}</span><span class="big" style="color:${val===null?'#9fb0c8':color}">${disp}</span></div>
+    ${row("縣市鄉鎮",(geo.CountyName||"")+" "+(geo.TownName||""))}
+    ${row("海拔",(geo.StationAltitude||"—")+" m")}`;
+  if(w){
+    html+=`<div style="border-top:1px solid var(--line);margin:6px 0 4px;padding-top:5px;color:#9fb0c8;font-size:11px">氣象觀測</div>`
+      +row("天氣",NA(we.Weather)?"—":we.Weather)
+      +row("氣溫 / 濕度",(num(we.AirTemperature)??"—")+"°C / "+(num(we.RelativeHumidity)??"—")+"%")
+      +row("風速 / 風向",(num(we.WindSpeed)??"—")+" m/s / "+(num(we.WindDirection)??"—")+"°")
+      +row("氣壓",(num(we.AirPressure)??"—")+" hPa");
+  }
+  if(r){
+    const p=k=>{const x=rget(r,k);return x===null?"—":x+" mm";};
+    html+=`<div style="border-top:1px solid var(--line);margin:6px 0 4px;padding-top:5px;color:#9fb0c8;font-size:11px">雨量觀測 (O-A0002-001)</div>`
+      +row("當前 / 時雨量",p("Now")+" / "+p("Past1hr"))
+      +row("3hr / 6hr",p("Past3hr")+" / "+p("Past6Hr"))
+      +row("12hr / 24hr",p("Past12hr")+" / "+p("Past24hr"));
+  }
+  if(su){
+    const sv=sunVal(su);
+    html+=`<div style="border-top:1px solid var(--line);margin:6px 0 4px;padding-top:5px;color:#9fb0c8;font-size:11px">日射量觀測 (O-A0091-001)</div>`
+      +row("日射量",sv===null?"—":sv.toLocaleString("zh-TW",{maximumFractionDigits:2})+" MJ/m²")
+      +row("日射觀測時間",su.ObsTime?.DateTime?new Date(su.ObsTime.DateTime).toLocaleString("zh-TW"):"—");
+  }
+  html+=row("觀測時間",s.ObsTime?.DateTime?new Date(s.ObsTime.DateTime).toLocaleString("zh-TW"):"—")+`</div>`;
+  return html;
+}
+
+function render(fit){
+  const v=curVar();layer.clearLayers();
+  const q=$("search").value.trim().toLowerCase();
+  const county=$("countySel").value;
+  const sc=sizeScale();
+  const pts=[];
+  const list=(v.src==="rain"?RAIN:v.src==="sun"?SUN:RAW);   // 依變數選擇資料來源
+  list.forEach(s=>{
+    if(county&&s.GeoInfo?.CountyName!==county)return;
+    if(q&&!((s.StationName||"").toLowerCase().includes(q)||(s.StationId||"").toLowerCase().includes(q)))return;
+    const ll=wgs84(s);if(!ll)return;
+    const val=v.get(s);
+    const we=s.WeatherElement||{};
+    const color=val===null?"#7a8aa3":colorFor(val,v);
+    const disp=val===null?"無資料":val.toLocaleString("zh-TW",{maximumFractionDigits:1})+" "+v.unit;
+    let m;
+    if(v.wind){
+      const spd=num(we.WindSpeed), dir=num(we.WindDirection);
+      const byDir=(v.key==="WindDirection");   // 「風向」變數：以風向上色、固定箭號大小
+      if(byDir){
+        if(dir===null){        // 無風向 → 灰點
+          m=L.circleMarker(ll,{radius:4*sc,fillColor:"#7a8aa3",color:"#fff",weight:1,fillOpacity:.9});
+        }else{                 // 箭號：方向=風的去向(風來向+180)，顏色=風向色階，固定大小
+          const size=24*sc, col=colorFor(dir,v), rot=(dir+180)%360;
+          const html=`<div style="transform:rotate(${rot}deg);width:${size}px;height:${size}px;line-height:0">
+            <svg viewBox="0 0 24 24" width="${size}" height="${size}">
+              <path d="M12 1 L19 16 L12 12.5 L5 16 Z" fill="${col}" stroke="#0b1220" stroke-width="1"/>
+            </svg></div>`;
+          m=L.marker(ll,{icon:L.divIcon({className:"windarrow",html,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
+        }
+      }else if(spd===null){    // 無風速 → 灰點
+        m=L.circleMarker(ll,{radius:4*sc,fillColor:"#7a8aa3",color:"#fff",weight:1,fillOpacity:.9});
+      }else if(dir===null){    // 有風速無風向 → 彩色圓點
+        m=L.circleMarker(ll,{radius:6*sc,fillColor:colorAt(RAMP.wind,spd),color:"#fff",weight:1,fillOpacity:.92});
+      }else{                   // 箭號：方向=風的去向(風來向+180)，大小與顏色=風速
+        const size=Math.max(16,Math.min(48,16+spd*2.4))*sc;
+        const col=colorAt(RAMP.wind,spd);
+        const rot=(dir+180)%360;
+        const html=`<div style="transform:rotate(${rot}deg);width:${size}px;height:${size}px;line-height:0">
+          <svg viewBox="0 0 24 24" width="${size}" height="${size}">
+            <path d="M12 1 L19 16 L12 12.5 L5 16 Z" fill="${col}" stroke="#0b1220" stroke-width="1"/>
+          </svg></div>`;
+        m=L.marker(ll,{icon:L.divIcon({className:"windarrow",html,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
+      }
+    }else{
+      const r=(val===null?4:6)*sc;
+      m=L.circleMarker(ll,{radius:r,fillColor:color,color:"#fff",weight:1,fillOpacity:.92});
+    }
+    m.bindPopup(buildPopup(s,v,val,color));
+    m.addTo(layer);pts.push(ll);
+  });
+  if(fit){
+    if($("countySel").value && pts.length){map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});}
+    else{map.fitBounds(TAIWAN);}   // 預設台灣本島
+  }
+  let note=`顯示 ${pts.length} 站 ‧ 變數：${v.label}`;
+  if(v.src==="sun"&&!SUN.length)note+="（日射量資料載入失敗或無資料）";
+  $("info").textContent=note;
+  legend(v);
+}
+
+function legend(v){
+  $("legTitle").textContent=v.wind
+    ?(v.key==="WindDirection"?`風向（${v.unit}）‧ 箭號`:`風速（${v.unit}）‧ 箭號`)
+    :`${v.label}（${v.unit}）`;
+  const bar=$("legBar"),ticks=$("legTicks");
+  if(v.levels){
+    // 離散分級：垂直色階（下冷上熱），門檻值標於色塊交界
+    const C=v.colors,L=v.levels,N=C.length,h=12;
+    ticks.style.display="none";
+    let html='<div style="display:flex;flex-direction:column;border:1px solid var(--line);width:26px">';
+    for(let t=0;t<N;t++){
+      const di=N-1-t;                       // 由上(熱)往下(冷)
+      const lab=(di-1>=0)?L[di-1]:"";        // 此色塊下界
+      html+=`<div style="position:relative;height:${h}px;background:${rgb(C[di])}">
+        ${lab!==""?`<span style="position:absolute;right:-26px;bottom:-7px;font-size:10px;color:var(--muted)">${lab}</span>`:""}
+      </div>`;
+    }
+    html+='</div>';
+    bar.style.background="none";bar.style.height="auto";bar.innerHTML=html;
+  }else{
+    bar.style.display="block";bar.style.height="14px";bar.innerHTML="";
+    bar.style.background=gradientCSS(v.ramp);
+    ticks.style.display="flex";
+    ticks.innerHTML=v.ramp.map(s=>`<span>${s[0]}</span>`).join("");
+  }
+  $("legNote").innerHTML=v.wind
+    ? (v.key==="WindDirection"
+        ? '🡑 箭號指向風的<b>去向</b>，顏色代表<b>風向角度</b>'
+        : '🡑 箭號指向風的<b>去向</b>，大小與顏色代表<b>風速</b>')
+    : (v.levels
+        ? (v.src==="rain"?'CWB/NCL 標準雨量分級 (mm) ‧ 資料：O-A0002-001':'CWB 溫度分級色階 (℃)')
+        : (v.src==="sun"?'署屬氣象站日射量 (MJ/m²) ‧ 資料：O-A0091-001':''));
+  $("legNote").style.display=(v.wind||v.levels||v.src==="sun")?"block":"none";
+}
+
+// ===== 雷達疊加圖層（O-A0059-001 整合回波 / O-B0045-001 估計降雨）=====
+// 專用 pane：底圖(200)之上、測站圓點(overlayPane 400)與箭號(markerPane 600)之下
+map.createPane("radar");
+map.getPane("radar").style.zIndex=350;
+map.getPane("radar").style.pointerEvents="none";
+
+const KNOWN_GRIDS=[
+  {nx:441,ny:561,lon0:118.0,lat0:20.0, res:0.0125},   // QPESUMS 雷達估計降雨
+  {nx:921,ny:921,lon0:115.0,lat0:17.75,res:0.0125},   // 雷達整合回波
+  {nx:67, ny:120,lon0:120.0,lat0:21.88,res:0.03}      // 溫度分析格點
+];
+const RADAR_DEFS={
+  echo:{id:"O-A0059-001",label:"雷達整合回波",unit:"dBZ",
+    grid:{nx:921,ny:921,lon0:115.0,lat0:17.75,res:0.0125},
+    bad:v=>v<=-90||!isFinite(v),
+    stops:[[0,[4,233,231]],[5,[1,159,244]],[10,[3,0,244]],[15,[2,253,2]],[20,[1,197,1]],
+      [25,[0,142,0]],[30,[253,248,2]],[35,[229,188,0]],[40,[253,149,0]],[45,[253,0,0]],
+      [50,[212,0,0]],[55,[188,0,0]],[60,[248,0,253]],[65,[152,84,198]]]},
+  qpe:{id:"O-B0045-001",label:"雷達估計降雨",unit:"mm",
+    grid:{nx:441,ny:561,lon0:118.0,lat0:20.0,res:0.0125},
+    bad:v=>v<0||!isFinite(v),
+    stops:[[0.5,[156,251,255]],[2,[0,205,255]],[6,[0,150,250]],[10,[0,105,250]],[15,[50,150,0]],
+      [20,[50,255,0]],[30,[255,255,0]],[40,[255,200,0]],[50,[255,150,0]],[70,[250,0,0]],
+      [90,[200,0,0]],[110,[160,0,0]],[130,[150,0,155]],[150,[200,0,210]],[200,[255,0,245]],[300,[255,200,255]]]}
+};
+function stopColor(stops,v){
+  if(v==null||isNaN(v))return null;
+  for(let i=stops.length-1;i>=0;i--)if(v>=stops[i][0])return stops[i][1];
+  return null;
+}
+// 在檔案型 JSON 中尋找網格內容（大量逗號分隔字串）與時間
+function findContent(o){
+  if(typeof o==="string")return(o.match(/,/g)||[]).length>10000?o:null;
+  if(o&&typeof o==="object"){for(const v of Object.values(o)){const r=findContent(v);if(r)return r;}}
+  return null;
+}
+function findRadarTime(o){
+  if(o&&typeof o==="object"){
+    for(const[k,v]of Object.entries(o)){
+      if(/datetime|obstime|sent/i.test(k)&&typeof v==="string"&&/\d{4}-\d{2}-\d{2}/.test(v))return v;
+      const r=findRadarTime(v);if(r)return r;
+    }
+  }
+  return null;
+}
+
+const radarCache={};
+let radarKind="",radarOverlay=null,lastLL=null;
+
+async function loadRadar(kind){
+  radarKind=kind;
+  if(radarOverlay){map.removeLayer(radarOverlay);radarOverlay=null;}
+  if(!kind){
+    $("radarStat").textContent="未啟用";$("radarTime").textContent="";
+    updatePosBox(lastLL);
+    return;
+  }
+  if(!KEY){$("radarSel").value="";radarKind="";openGate();return;}
+  const def=RADAR_DEFS[kind];
+  if(!radarCache[kind]){
+    $("radarStat").textContent="⏳ 下載中（檔案較大，請稍候）…";
+    try{
+      const url="https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/"+def.id
+        +"?Authorization="+encodeURIComponent(KEY)+"&downloadType=WEB&format=JSON&_t="+Date.now();
+      const j=await fetch(url).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();});
+      const content=findContent(j);
+      if(!content)throw new Error("找不到網格資料內容");
+      const parts=content.trim().split(/[,\s]+/);
+      const vals=new Float32Array(parts.length);
+      for(let i=0;i<parts.length;i++){const v=parseFloat(parts[i]);vals[i]=def.bad(v)?NaN:v;}
+      const g=KNOWN_GRIDS.find(x=>x.nx*x.ny===vals.length)||def.grid;
+      radarCache[kind]={values:vals,grid:g,time:findRadarTime(j)};
+    }catch(e){
+      $("radarStat").textContent="載入失敗："+e.message+"（可能為瀏覽器 CORS 限制）";
+      if(radarKind===kind){$("radarSel").value="";radarKind="";}
+      return;
+    }
+  }
+  if(radarKind!==kind)return;   // 下載期間使用者已切換
+  buildRadarOverlay();
+  $("radarStat").textContent=def.label+"（"+def.unit+"）";
+  $("radarTime").textContent=radarCache[kind].time
+    ?"🕒 "+new Date(radarCache[kind].time).toLocaleString("zh-TW"):"";
+  updatePosBox(lastLL);
+}
+
+function buildRadarOverlay(){
+  const def=RADAR_DEFS[radarKind],c=radarCache[radarKind];
+  if(!def||!c)return;
+  const{nx:NXr,ny:NYr,lon0:LO,lat0:LA,res:RS}=c.grid;
+  const LON1=LO+(NXr-1)*RS,LAT1=LA+(NYr-1)*RS;
+  // 1) 原始網格 → 影像（資料由南到北 → 北在上）
+  const src=document.createElement("canvas");src.width=NXr;src.height=NYr;
+  const ctx=src.getContext("2d");
+  const img=ctx.createImageData(NXr,NYr),d=img.data;
+  for(let row=0;row<NYr;row++){
+    const sr=NYr-1-row;
+    for(let col=0;col<NXr;col++){
+      const v=c.values[sr*NXr+col],p=(row*NXr+col)*4;
+      const cc=stopColor(def.stops,v);
+      if(cc){d[p]=cc[0];d[p+1]=cc[1];d[p+2]=cc[2];d[p+3]=255;}
+    }
+  }
+  ctx.putImageData(img,0,0);
+  // 2) 麥卡托投影列校正（重採樣），疊圖位置才準確
+  const H=1400,out=document.createElement("canvas");
+  out.width=NXr;out.height=H;
+  const octx=out.getContext("2d");octx.imageSmoothingEnabled=false;
+  const mercY=lat=>Math.log(Math.tan(Math.PI/4+lat*Math.PI/360));
+  const yN=mercY(LAT1),yS=mercY(LA);
+  for(let j=0;j<H;j++){
+    const y=yN+(j+0.5)/H*(yS-yN);
+    const lat=(2*Math.atan(Math.exp(y))-Math.PI/2)*180/Math.PI;
+    const sr=Math.max(0,Math.min(NYr-1,Math.round((LAT1-lat)/RS)));
+    octx.drawImage(src,0,sr,NXr,1,0,j,NXr,1);
+  }
+  if(radarOverlay)map.removeLayer(radarOverlay);
+  radarOverlay=L.imageOverlay(out.toDataURL("image/png"),[[LA,LO],[LAT1,LON1]],
+    {opacity:+$("radarOp").value/100,pane:"radar",interactive:false}).addTo(map);
+}
+
+function radarAt(lat,lng){
+  const c=radarCache[radarKind];if(!c)return null;
+  const{nx:NXr,ny:NYr,lon0:LO,lat0:LA,res:RS}=c.grid;
+  const col=Math.round((lng-LO)/RS),row=Math.round((lat-LA)/RS);
+  if(col<0||row<0||col>=NXr||row>=NYr)return null;
+  const v=c.values[row*NXr+col];
+  return isNaN(v)?null:v;
+}
+
+// 游標移動 / 點擊（手機）更新下方中間讀值
+function updatePosBox(ll){
+  if(!ll)return;
+  lastLL=ll;
+  $("posLL").textContent=ll.lat.toFixed(3)+"°N, "+ll.lng.toFixed(3)+"°E";
+  const def=RADAR_DEFS[radarKind],el=$("posVal");
+  if(!def){el.textContent="（未啟用雷達圖層）";el.style.color="var(--muted)";return;}
+  const v=radarAt(ll.lat,ll.lng);
+  const cc=v==null?null:stopColor(def.stops,v);
+  el.textContent=def.label+"："+(v==null?"--":v.toFixed(1)+" "+def.unit);
+  el.style.color=cc?`rgb(${cc[0]},${cc[1]},${cc[2]})`:"var(--muted)";
+}
+map.on("mousemove",e=>updatePosBox(e.latlng));
+map.on("click",e=>updatePosBox(e.latlng));
+
+$("radarSel").onchange=e=>loadRadar(e.target.value);
+$("radarOp").oninput=e=>{
+  $("radarOpV").textContent=e.target.value+"%";
+  if(radarOverlay)radarOverlay.setOpacity(e.target.value/100);
+};
+
+map.on("zoomend",()=>{if(RAW.length)render(false);});  // 縮放時等比例調整標示大小
+$("varSel").onchange=()=>render(false);
+$("countySel").onchange=()=>render(true);
+$("search").oninput=()=>render(false);
+$("reload").onclick=()=>{
+  Object.keys(radarCache).forEach(k=>delete radarCache[k]);   // 重新整理時一併更新雷達資料
+  load();
+  if(radarKind)loadRadar(radarKind);
+};
+$("fit").onclick=()=>{$("countySel").value="";$("search").value="";map.fitBounds(TAIWAN);render(false);};
+$("baseSel").onchange=e=>{map.removeLayer(curBase);curBase=BASES[e.target.value].addTo(map);curBase.bringToBack();};
+$("changeKey").onclick=()=>openGate();
+
+// ===== 面板 / 圖例 縮小切換（利於手機排版）=====
+function bindCollapse(boxId,btnId){
+  const box=$(boxId),btn=$(btnId);
+  btn.onclick=()=>{
+    box.classList.toggle("collapsed");
+    btn.textContent=box.classList.contains("collapsed")?"＋":"−";
+  };
+}
+bindCollapse("panel","panelToggle");
+bindCollapse("legend","legToggle");
+// 面板靠左 / 靠右切換（記住偏好）
+$("panelSide").onclick=()=>{
+  const right=$("panel").classList.toggle("dock-right");
+  try{localStorage.setItem("cwa_panel_side",right?"right":"left");}catch(e){}
+};
+try{if(localStorage.getItem("cwa_panel_side")==="right")$("panel").classList.add("dock-right");}catch(e){}
+bindCollapse("radarBox","radarBoxToggle");
+// 手機窄螢幕：預設縮小圖例與雷達控制，減少遮擋地圖
+if(window.innerWidth<=520){
+  [["legend","legToggle"],["radarBox","radarBoxToggle"]].forEach(([b,t])=>{
+    $(b).classList.add("collapsed");$(t).textContent="＋";
+  });
+}
+
+// ===== 金鑰輸入畫面控制 =====
+function openGate(msg){
+  $("gate").style.display="flex";
+  if(msg){$("keyErr").textContent=msg;$("keyErr").style.display="block";}
+  else{$("keyErr").style.display="none";}
+  const inp=$("keyInput");
+  if(KEY)inp.value=KEY;
+  setTimeout(()=>inp.focus(),50);
+}
+function closeGate(){$("gate").style.display="none";}
+
+$("keyToggle").onclick=()=>{
+  const inp=$("keyInput");
+  inp.type=inp.type==="password"?"text":"password";
+};
+
+function submitKey(){
+  const k=$("keyInput").value.trim();
+  if(!k){$("keyErr").textContent="請輸入 API 授權碼";$("keyErr").style.display="block";return;}
+  setKey(k);
+  if($("rememberKey").checked){try{localStorage.setItem(STORE,k);}catch(e){}}
+  else{try{localStorage.removeItem(STORE);}catch(e){}}
+  closeGate();
+  load();
+}
+$("enterBtn").onclick=submitKey;
+$("keyInput").addEventListener("keydown",e=>{if(e.key==="Enter")submitKey();});
+
+// 啟動：若瀏覽器已記住金鑰則直接載入，否則顯示輸入畫面
+(function init(){
+  let saved="";
+  try{saved=localStorage.getItem(STORE)||"";}catch(e){}
+  if(saved){
+    $("rememberKey").checked=true;
+    setKey(saved);
+    closeGate();
+    load();
+  }else{
+    openGate();
+  }
+})();
+</script>
+</body>
+</html>

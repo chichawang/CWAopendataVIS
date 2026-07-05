@@ -1,0 +1,719 @@
+/* ===== CWA Integrated Dashboard Styles (css/main.css) ===== */
+
+:root {
+  --bg: #070c18;
+  --bg-gradient: radial-gradient(circle at 50% 0%, #0c1830 0%, #070c18 100%);
+  --panel-bg: rgba(11, 19, 36, 0.82);
+  --card-bg: rgba(20, 31, 56, 0.6);
+  --card-hover: rgba(28, 43, 76, 0.85);
+  --border: rgba(42, 60, 97, 0.45);
+  --border-focus: rgba(0, 229, 255, 0.8);
+  --txt: #e6edf6;
+  --muted: #9fb0c8;
+  
+  --accent: #00e5ff;
+  --accent-rgb: 0, 229, 255;
+  --accent-hover: #00b8d4;
+  --danger: #ff5252;
+  --warning: #ffd740;
+  --success: #69f0ae;
+  
+  --glow: 0 0 12px rgba(0, 229, 255, 0.25);
+  --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  --blur: blur(12px);
+  --sidebar-w: 260px;
+}
+
+[data-theme="light"] {
+  --bg: #f0f4f9;
+  --bg-gradient: radial-gradient(circle at 50% 0%, #e2ebf6 0%, #f0f4f9 100%);
+  --panel-bg: rgba(255, 255, 255, 0.85);
+  --card-bg: rgba(235, 240, 248, 0.7);
+  --card-hover: rgba(220, 230, 245, 0.9);
+  --border: rgba(180, 195, 220, 0.6);
+  --border-focus: rgba(0, 184, 212, 0.9);
+  --txt: #1c2a38;
+  --muted: #5e6e82;
+  --accent: #00b8d4;
+  --accent-rgb: 0, 184, 212;
+  --glow: 0 0 8px rgba(0, 184, 212, 0.15);
+  --shadow: 0 8px 32px 0 rgba(100, 120, 150, 0.15);
+  --blur: blur(8px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: "Outfit", "Noto Sans TC", system-ui, -apple-system, sans-serif;
+  color: var(--txt);
+  background: var(--bg);
+  background-image: var(--bg-gradient);
+  overflow: hidden;
+}
+
+/* ===== App Container Layout ===== */
+#app-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ===== Sidebar Navigation ===== */
+#sidebar {
+  width: var(--sidebar-w);
+  background: var(--panel-bg);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-right: 1px solid var(--border);
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  transition: transform 0.3s ease;
+}
+
+#sidebar .brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+#sidebar .brand h1 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 700;
+  background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+#sidebar .nav-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#sidebar .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: all 0.25s ease;
+  border: 1px solid transparent;
+}
+
+#sidebar .nav-item i {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+#sidebar .nav-item:hover {
+  background: var(--card-hover);
+  color: var(--txt);
+  transform: translateX(4px);
+}
+
+#sidebar .nav-item.active {
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.3);
+  color: var(--accent);
+  box-shadow: var(--glow);
+}
+
+#sidebar .footer {
+  margin-top: auto;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+#sidebar .footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+#sidebar .footer a:hover {
+  text-decoration: underline;
+}
+
+/* ===== Main Dashboard Layout ===== */
+#main-dashboard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+/* ===== Header Area ===== */
+#header {
+  height: 60px;
+  background: var(--panel-bg);
+  backdrop-filter: var(--blur);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 990;
+}
+
+#header .left-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+#menu-toggle {
+  display: none;
+  font-size: 20px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--txt);
+}
+
+#tab-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#header .right-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.countdown-bar {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.update-time {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.config-btn {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--txt);
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.config-btn:hover {
+  background: var(--card-hover);
+  border-color: var(--accent);
+  box-shadow: var(--glow);
+}
+
+/* ===== Content Panels ===== */
+#content-container {
+  flex: 1;
+  display: flex;
+  position: relative;
+  min-height: 0;
+}
+
+#map-container {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+
+/* ===== Sliding Side Panel ===== */
+#side-panel {
+  width: 440px;
+  background: var(--panel-bg);
+  backdrop-filter: var(--blur);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 980;
+  overflow-y: auto;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 20px;
+}
+
+#side-panel.collapsed {
+  display: none;
+}
+
+/* ===== Card & Grid layouts inside side panels ===== */
+.panel-section {
+  margin-bottom: 20px;
+}
+
+.panel-section h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 12px 0;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.grid-2x2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.kpi-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-align: center;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card:hover {
+  background: var(--card-hover);
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.kpi-card .kpi-num {
+  font-size: 24px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.kpi-card .kpi-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.kpi-card.normal { border-top: 3px solid var(--success); }
+.kpi-card.warning { border-top: 3px solid var(--warning); }
+.kpi-card.offline { border-top: 3px solid var(--danger); }
+.kpi-card.alert-card { border-top: 3px solid #f06292; }
+
+.kpi-card.normal .kpi-num { color: var(--success); }
+.kpi-card.warning .kpi-num { color: var(--warning); }
+.kpi-card.offline .kpi-num { color: var(--danger); }
+.kpi-card.alert-card .kpi-num { color: #f06292; }
+
+/* ===== Custom Control Panels over the Map ===== */
+.map-control-box {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 900;
+  background: rgba(11, 19, 36, 0.9);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  width: 280px;
+  box-shadow: var(--shadow);
+}
+
+.map-control-box h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.map-control-box .ctrl-group {
+  margin-bottom: 10px;
+}
+
+.map-control-box label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+select, input[type="text"], input[type="password"] {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(6, 12, 24, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--txt);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+select:focus, input:focus {
+  border-color: var(--border-focus);
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  outline: none;
+  accent-color: var(--accent);
+}
+
+/* ===== Floating Legend ===== */
+.map-legend {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  z-index: 900;
+  background: rgba(11, 19, 36, 0.9);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  width: 220px;
+  box-shadow: var(--shadow);
+}
+
+.map-legend .legend-title {
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.map-legend .legend-bar {
+  height: 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.map-legend .legend-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* ===== Leaflet Custom Popup Styling ===== */
+.leaflet-popup-content-wrapper {
+  background: var(--panel-bg) !important;
+  backdrop-filter: var(--blur) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  color: var(--txt) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.popup-details {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.popup-details h4 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.popup-details .detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+  padding: 3px 0;
+}
+
+.popup-details .detail-row .lbl {
+  color: var(--muted);
+}
+
+.popup-details .detail-row .val {
+  font-weight: 600;
+}
+
+/* ===== Alerts & Warnings Banner ===== */
+#warnings-marquee-banner {
+  background: rgba(255, 82, 82, 0.15);
+  border-bottom: 1px solid rgba(255, 82, 82, 0.3);
+  color: #ff8a80;
+  font-size: 13px;
+  font-weight: 600;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+  z-index: 995;
+}
+
+.marquee-content {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 25s linear infinite;
+  padding-left: 100%;
+}
+
+@keyframes marquee {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-100%, 0, 0); }
+}
+
+/* ===== Full-panel mode (for tabs without maps, like astronomy) ===== */
+.full-panel-view {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.full-panel-view.full-cols {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-card h3 {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+/* ===== Astro Orbit Trajectory Map ===== */
+.astro-orbit-container {
+  position: relative;
+  height: 160px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.astro-arc {
+  position: absolute;
+  width: 80%;
+  height: 120px;
+  left: 10%;
+  bottom: 0;
+  border-top-left-radius: 100px;
+  border-top-right-radius: 100px;
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-bottom: none;
+}
+
+.astro-horizon {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 20px;
+}
+
+.astro-body {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transform: translate(-12px, -12px);
+  transition: all 0.5s ease;
+  box-shadow: 0 0 15px currentColor;
+}
+
+/* ===== loading Overlay ===== */
+#loader-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 12, 24, 0.85);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  backdrop-filter: blur(10px);
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(0, 229, 255, 0.1);
+  border-left-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ===== API Gate Modal ===== */
+#api-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: radial-gradient(circle at 50% 0%, #0d1e3a 0%, #070c18 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#api-gate .gate-box {
+  width: min(440px, calc(100% - 32px));
+  background: var(--panel-bg);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: var(--shadow);
+}
+
+#api-gate h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+#api-gate .gate-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+#api-gate .btn-enter {
+  width: 100%;
+  padding: 12px;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #070c18;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 16px;
+  transition: filter 0.2s;
+}
+
+#api-gate .btn-enter:hover {
+  filter: brightness(1.12);
+}
+
+/* ===== Responsive Styles ===== */
+@media (max-width: 860px) {
+  #app-container {
+    flex-direction: column;
+  }
+  
+  #sidebar {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    bottom: 0;
+    width: 240px;
+    transform: translateX(-100%);
+  }
+  
+  #sidebar.open {
+    transform: translateX(0);
+  }
+  
+  #menu-toggle {
+    display: block;
+  }
+  
+  #content-container {
+    flex-direction: column;
+  }
+  
+  #side-panel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 380px;
+  }
+  
+  .full-panel-view {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+}

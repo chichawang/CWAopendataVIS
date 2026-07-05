@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CWA 氣象與海象綜合數據整合儀表板</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Leaflet GIS Map Library -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Chart.js Graphics Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  
+  <!-- Unified Styles -->
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+  <!-- Loader Overlay -->
+  <div id="loader-overlay" style="display: none;">
+    <div class="spinner"></div>
+    <div id="loader-text">載入氣象資料中…</div>
+  </div>
+
+  <!-- API Authorization Gate -->
+  <div id="api-gate" style="display: none;">
+    <div class="gate-box">
+      <h2>🔑 氣象署 Open Data 整合儀表板</h2>
+      <p class="gate-desc">本產品整合中央氣象署觀測、格點、海象、預報與天文等數十項數據源。請輸入您的 API 授權碼（Authorization Key）以開始使用。</p>
+      
+      <div style="margin-bottom: 16px;">
+        <label for="gate-key-input" style="display:block; font-size:11px; color:var(--muted); margin-bottom:6px; font-weight:700;">CWA API 授權碼</label>
+        <input id="gate-key-input" type="password" placeholder="CWA-XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" autocomplete="off" spellcheck="false">
+        <div id="gate-key-err" style="color:var(--danger); font-size:11px; margin-top:6px; display:none;"></div>
+      </div>
+      
+      <button class="btn-enter" id="gate-enter-btn">驗證並進入儀表板 →</button>
+      
+      <div style="font-size:11px; color:var(--muted); margin-top:20px; line-height:1.5; border-top:1px solid var(--border); padding-top:16px;">
+        尚未申請？可前往 <a href="https://opendata.cwa.gov.tw/user/authkey" target="_blank" rel="noopener">氣象署開放資料平臺</a> 免費取得。金鑰僅安全儲存在此瀏覽器，絕不上傳。
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Application Wrapper -->
+  <div id="app-container">
+    
+    <!-- Sidebar Navigation -->
+    <aside id="sidebar">
+      <div class="brand">
+        <i class="fa-solid fa-wind" style="font-size: 20px; color: var(--accent);"></i>
+        <h1>CWA 綜合儀表板</h1>
+      </div>
+      
+      <ul class="nav-list">
+        <li class="nav-item">
+          <i class="fa-solid fa-cloud-sun-rain"></i>
+          <span>即時觀測 / 格點</span>
+        </li>
+        <li class="nav-item">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>預報與警特報</span>
+        </li>
+        <li class="nav-item">
+          <i class="fa-solid fa-anchor"></i>
+          <span>海象與藍色公路</span>
+        </li>
+        <li class="nav-item">
+          <i class="fa-solid fa-earthquake"></i>
+          <span>地震與地球物理</span>
+        </li>
+        <li class="nav-item">
+          <i class="fa-solid fa-bicycle"></i>
+          <span>休閒景點預報</span>
+        </li>
+        <li class="nav-item">
+          <i class="fa-solid fa-calendar-days"></i>
+          <span>曆法與氣候統計</span>
+        </li>
+      </ul>
+      
+      <div class="footer">
+        <div>數據來源：中央氣象署</div>
+        <div>授權條款：<a href="https://data.gov.tw/license" target="_blank" rel="noopener">政府資料開放授權</a></div>
+      </div>
+    </aside>
+    
+    <!-- Main Dashboard Section -->
+    <main id="main-dashboard">
+      
+      <!-- Top header bar -->
+      <header id="header">
+        <div class="left-header">
+          <button id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+          <h2 id="tab-title"><i class="fa-solid fa-cloud-sun-rain"></i> 即時天氣觀測</h2>
+        </div>
+        
+        <div class="right-header">
+          <span class="update-time" id="obs-time-text">🕒 資料時間：—</span>
+          <button class="config-btn" id="change-key-btn"><i class="fa-solid fa-key"></i> 金鑰管理</button>
+        </div>
+      </header>
+      
+      <!-- Content Container split layout -->
+      <div id="content-container">
+        
+        <!-- Leaflet Map Container -->
+        <div id="map-container">
+          <div id="map"></div>
+          
+          <!-- Shared Dynamic Map Legend overlay -->
+          <div id="legend-container" class="map-legend" style="display: none;">
+            <div class="legend-title" id="leg-title">圖例</div>
+            <div class="legend-bar" id="leg-bar"></div>
+            <div class="legend-ticks" id="leg-ticks"></div>
+          </div>
+        </div>
+        
+        <!-- Fullpanel container (for Astronomy grid view) -->
+        <div id="full-panel-container" style="display: none; flex: 1; overflow-y: auto; background: var(--bg);"></div>
+        
+        <!-- Side panel for cards and details -->
+        <aside id="side-panel">
+          <!-- Dynamically populated by active tab modules -->
+        </aside>
+        
+      </div>
+      
+    </main>
+    
+  </div>
+
+  <!-- Bootstraper Application Module -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
