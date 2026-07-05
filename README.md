@@ -4,7 +4,7 @@
 
 本專案為 **純前端單頁 Web 應用程式 (SPA)**（HTML5 + Vanilla CSS + ES6+ Modules），無需任何後端伺服器，適合直接佈署於 **GitHub Pages**。
 
-👉 **[點此訪問線上展示版](https://chichawang.github.io/CWAopendataVIS/)** *(請將連結替換為您的實際 GitHub Pages 網址)*
+👉 **[點此訪問線上展示版](https://chichawang.github.io/CWAdataVIS/)** *(請將連結替換為您的實際 GitHub Pages 網址)*
 
 ---
 

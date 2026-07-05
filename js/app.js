@@ -276,15 +276,68 @@ class App {
   }
 }
 
+// ===== 啟動流程 =====
 // 直接啟動：ES module 具 defer 特性，執行時 DOM 已解析完成。
 // 不可使用 window.onload — 只要任一 CDN 資源（字型/圖磚）載入緩慢或被阻擋，
 // load 事件就會被延遲甚至不觸發，導致 GitHub Pages 上整頁空白。
-const app = new App();
-window.cwaApp = app; // 方便除錯
-try {
-  app.init();
-} catch (e) {
-  console.error("初始化失敗", e);
+
+function showFatal(msg) {
+  console.error(msg);
   document.body.insertAdjacentHTML("beforeend",
-    `<div style="position:fixed;inset:auto 16px 16px 16px;background:#3a0d0d;color:#ffbaba;padding:12px 16px;border-radius:8px;z-index:99999;font-size:13px;">儀表板初始化失敗：${e.message}</div>`);
+    `<div style="position:fixed;left:16px;right:16px;bottom:16px;background:#3a0d0d;color:#ffbaba;padding:12px 16px;border-radius:8px;z-index:99999;font-size:13px;line-height:1.6;">${msg}</div>`);
 }
+
+// 任何未捕捉的錯誤都顯示在頁面上，不再無聲空白
+window.addEventListener("error", e => {
+  if (e.message) showFatal("執行錯誤：" + e.message);
+});
+window.addEventListener("unhandledrejection", e => {
+  console.error("未處理的 Promise 錯誤", e.reason);
+});
+
+function loadScript(src) {
+  return new Promise(resolve => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
+
+// Leaflet 載入保險：index.html 主來源為 cdnjs，失敗時依序嘗試備援 CDN
+async function ensureLeaflet() {
+  if (typeof L !== "undefined") return true;
+  const fallbacks = [
+    "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+    "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"
+  ];
+  const cssFallback = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+  for (const src of fallbacks) {
+    await loadScript(src);
+    if (typeof L !== "undefined") {
+      // 同步補上 CSS（主 CSS 可能也失敗）
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = cssFallback;
+      document.head.appendChild(link);
+      return true;
+    }
+  }
+  return false;
+}
+
+(async () => {
+  if (!(await ensureLeaflet())) {
+    showFatal("⚠️ 地圖引擎 Leaflet 無法從任何 CDN 載入（cdnjs / unpkg / jsdelivr 均失敗）。請檢查網路連線或防火牆設定後重新整理。");
+    return;
+  }
+  try {
+    const app = new App();
+    window.cwaApp = app; // 方便除錯
+    app.init();
+  } catch (e) {
+    console.error("初始化失敗", e);
+    showFatal("儀表板初始化失敗：" + e.message);
+  }
+})();

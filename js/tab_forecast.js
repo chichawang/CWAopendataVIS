@@ -253,7 +253,7 @@ export const tabForecast = {
             // Draw storm center
             L.circleMarker([lat, lon], {
               radius: 12,
-              fillColor: var(--danger),
+              fillColor: "#ff5252",
               color: "#fff",
               weight: 2,
               fillOpacity: 0.8
@@ -263,8 +263,8 @@ export const tabForecast = {
             // Bounding storm radius (approx 200km storm radius)
             L.circle([lat, lon], {
               radius: 200000,
-              color: var(--danger),
-              fillColor: var(--danger),
+              color: "#ff5252",
+              fillColor: "#ff5252",
               fillOpacity: 0.1,
               weight: 1
             }).addTo(this.layerTyphoon);
