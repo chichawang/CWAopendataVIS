@@ -97,32 +97,60 @@ export const tabForecast = {
   async loadData() {
     this.app.showLoader("正在下載預報與警戒資料...");
     try {
-      const jWarn = await CWA_API.getWeatherWarnings().catch(() => null);
-      const j36h = await CWA_API.getCounty36hForecast();
-      const j7d = await CWA_API.getCounty7dForecast().catch(() => null);
-      const jTyphoon = await CWA_API.getTyphoonAdvisory().catch(() => null);
-      const jCold = await CWA_API.getHealthForecast("F-A0085-002").catch(() => null);
-      const jHeat = await CWA_API.getHealthForecast("M-A0085-001").catch(() => null);
-      
-      this.warnings = jWarn?.records?.warning || [];
-      this.forecast36h = j36h?.records?.location || [];
-      this.forecast7d = j7d?.records?.location || [];
-      this.typhoons = jTyphoon?.records?.tropicalCyclones?.tropicalCyclone || [];
-      
-      // Parse health indices
-      this.healthCold = jCold?.records?.locations?.location || [];
-      this.healthHeat = jHeat?.records?.locations?.location || [];
-      
-      // Setup Warnings Marquee Banner
+      // 平行抓取全部資料集，單一失敗不影響其它
+      const [rWarn, r36h, r7d, rTyphoon, rCold, rHeat] = await Promise.allSettled([
+        CWA_API.getWeatherWarnings(),
+        CWA_API.getCounty36hForecast(),
+        CWA_API.getCounty7dForecast(),
+        CWA_API.getTyphoonAdvisory(),
+        CWA_API.getHealthForecast("F-A0085-002"),
+        CWA_API.getHealthForecast("M-A0085-001")
+      ]);
+      const val = r => (r.status === "fulfilled" ? r.value : null);
+
+      if (r36h.status === "rejected") {
+        throw new Error(r36h.reason?.message || "無法取得 36 小時預報");
+      }
+
+      // W-C0033-001 實際格式：records.location[].hazardConditions.hazards[]
+      this.warnings = this.parseWarnings(val(rWarn));
+      this.forecast36h = val(r36h)?.records?.location || [];
+      this.forecast7d = val(r7d)?.records?.location || [];
+      this.typhoons = val(rTyphoon)?.records?.tropicalCyclones?.tropicalCyclone || [];
+      this.healthCold = val(rCold)?.records?.locations?.location || [];
+      this.healthHeat = val(rHeat)?.records?.locations?.location || [];
+
       this.setupWarningsMarquee();
     } catch (e) {
       console.error(e);
-      alert("載入預報資料失敗: " + e.message);
+      this.app.showToast("載入預報資料失敗：" + e.message, "error");
     } finally {
       this.app.hideLoader();
     }
   },
-  
+
+  // 將 W-C0033-001 的縣市×災害展平為「現象 → 受影響縣市」清單
+  parseWarnings(jWarn) {
+    const locs = jWarn?.records?.location || [];
+    const byPhenomena = {};
+    locs.forEach(loc => {
+      const hazards = loc.hazardConditions?.hazards || [];
+      hazards.forEach(h => {
+        const info = h.info || {};
+        const phen = info.phenomena || "特報";
+        const sig = info.significance || "";
+        const key = `${phen}${sig}`;
+        if (!byPhenomena[key]) {
+          byPhenomena[key] = { type: key, counties: [], startTime: h.validTime?.startTime, endTime: h.validTime?.endTime };
+        }
+        if (!byPhenomena[key].counties.includes(loc.locationName)) {
+          byPhenomena[key].counties.push(loc.locationName);
+        }
+      });
+    });
+    return Object.values(byPhenomena);
+  },
+
   setupWarningsMarquee() {
     let marquee = document.getElementById("warnings-marquee-banner");
     if (!marquee) {
@@ -130,14 +158,13 @@ export const tabForecast = {
       marquee.id = "warnings-marquee-banner";
       document.getElementById("main-dashboard").insertBefore(marquee, document.getElementById("content-container"));
     }
-    
+
     if (this.warnings.length === 0) {
       marquee.style.display = "none";
       return;
     }
-    
-    // Construct alert text
-    const textList = this.warnings.map(w => `${w.warningInformation?.type}：${w.warningInformation?.text}`);
+
+    const textList = this.warnings.map(w => `${w.type}（${w.counties.slice(0, 6).join("、")}${w.counties.length > 6 ? " 等" : ""}）`);
     marquee.innerHTML = `<div class="marquee-content"><i class="fa-solid fa-triangle-exclamation"></i> ${textList.join(" | ")}</div>`;
     marquee.style.display = "flex";
   },
@@ -291,18 +318,15 @@ export const tabForecast = {
       }
     }
     
-    // Warnings Section
-    const countyWarns = this.warnings.filter(w => {
-      const affected = w.warningInformation?.affectedAreas?.area || [];
-      return affected.some(a => a.areaName === this.selectedCounty);
-    });
-    
+    // Warnings Section（新版結構：w.type / w.counties / w.startTime / w.endTime）
+    const countyWarns = this.warnings.filter(w => w.counties.includes(this.selectedCounty));
+
     let warningHtml = `<div style="font-size:12px; color:var(--muted);">目前無生效之天氣警特報</div>`;
     if (countyWarns.length > 0) {
       warningHtml = countyWarns.map(w => `
         <div style="background: rgba(255,82,82,0.12); border: 1px solid rgba(255,82,82,0.3); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px;">
-          <div style="color: #ff8a80; font-weight:700; font-size:13px;"><i class="fa-solid fa-triangle-exclamation"></i> ${w.warningInformation?.type}</div>
-          <div style="font-size: 11px; margin-top: 4px; line-height: 1.4;">${w.warningInformation?.text}</div>
+          <div style="color: #ff8a80; font-weight:700; font-size:13px;"><i class="fa-solid fa-triangle-exclamation"></i> ${w.type}</div>
+          <div style="font-size: 11px; margin-top: 4px; line-height: 1.4;">生效時間：${w.startTime || "—"} ～ ${w.endTime || "—"}</div>
         </div>
       `).join("");
     }

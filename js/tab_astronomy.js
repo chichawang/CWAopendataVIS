@@ -74,8 +74,9 @@ export const tabAstronomy = {
       </div>
     `;
     
-    document.getElementById("astro-county-sel").onchange = (e) => {
+    document.getElementById("astro-county-sel").onchange = async (e) => {
       this.selectedCounty = e.target.value;
+      await this.loadSunriseData(); // 每縣市僅 <1KB，且有 1 天快取
       this.render();
     };
   },
@@ -83,18 +84,31 @@ export const tabAstronomy = {
   async loadData() {
     this.app.showLoader("正在載入天文日曆與歷史氣候數據...");
     try {
-      const jCalendar = await CWA_API.getAstronomyCalendar().catch(() => null);
-      const jSun = await CWA_API.getCountySunriseSunset().catch(() => null);
-      const jNorm = await CWA_API.getClimatologyMonthlyNormals().catch(() => null);
-      
-      this.astronomyData = jCalendar;
-      this.sunriseSunset = jSun?.records?.locations?.location || [];
-      this.climateNormals = jNorm?.records?.location || [];
+      // 平行載入；日出日沒只抓「選定縣市 + 今日」（<1KB，取代原本全台整年數 MB）
+      const [rCalendar, rSun, rNorm] = await Promise.allSettled([
+        CWA_API.getAstronomyCalendar(), // fileapi，可能因 CORS 失敗 → 月相改用演算法
+        CWA_API.getCountySunriseSunset(this.selectedCounty),
+        CWA_API.getClimatologyMonthlyNormals()
+      ]);
+
+      this.astronomyData = rCalendar.status === "fulfilled" ? rCalendar.value : null;
+      this.sunriseSunset = (rSun.status === "fulfilled" ? rSun.value?.records?.locations?.location : null) || [];
+      this.climateNormals = (rNorm.status === "fulfilled" ? rNorm.value?.records?.location : null) || [];
     } catch (e) {
       console.error(e);
-      alert("載入天文/氣候資料失敗: " + e.message);
+      this.app.showToast("載入天文/氣候資料失敗：" + e.message, "error");
     } finally {
       this.app.hideLoader();
+    }
+  },
+
+  async loadSunriseData() {
+    try {
+      const jSun = await CWA_API.getCountySunriseSunset(this.selectedCounty);
+      this.sunriseSunset = jSun?.records?.locations?.location || [];
+    } catch (e) {
+      console.error(e);
+      this.sunriseSunset = [];
     }
   },
   
@@ -108,22 +122,26 @@ export const tabAstronomy = {
     const card = document.getElementById("astro-card");
     if (!card) return;
     
-    // Find sunrise/sunset details for selected county
-    const sunLoc = this.sunriseSunset.find(l => l.locationName === this.selectedCounty);
-    
+    // A-B0062-001 新版格式：locations.location[].CountyName + time[].SunRiseTime/SunSetTime
+    const sunLoc = this.sunriseSunset.find(l => (l.CountyName || l.locationName) === this.selectedCounty)
+                || this.sunriseSunset[0];
+
     let riseStr = "05:15";
     let setStr = "18:45";
-    
+
     if (sunLoc) {
-      // Find today's date record
       const today = new Date();
       const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
       const timeRecs = sunLoc.time || [];
-      const todayRec = timeRecs.find(t => t.dataDate === todayStr || t.time === todayStr);
-      
+      const todayRec = timeRecs.find(t => t.Date === todayStr || t.dataDate === todayStr) || timeRecs[0];
+
       if (todayRec) {
-        riseStr = todayRec.parameter?.find(p => p.parameterName === "日出時刻")?.parameterValue || "05:15";
-        setStr = todayRec.parameter?.find(p => p.parameterName === "日沒時刻")?.parameterValue || "18:45";
+        riseStr = todayRec.SunRiseTime
+               || todayRec.parameter?.find(p => p.parameterName === "日出時刻")?.parameterValue
+               || "05:15";
+        setStr = todayRec.SunSetTime
+              || todayRec.parameter?.find(p => p.parameterName === "日沒時刻")?.parameterValue
+              || "18:45";
       }
     }
     

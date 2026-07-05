@@ -169,8 +169,11 @@ export const tabObservation = {
     
     // Bind event listeners
     document.getElementById("var-sel").value = this.activeVar;
-    document.getElementById("var-sel").onchange = (e) => {
+    document.getElementById("var-sel").onchange = async (e) => {
       this.activeVar = e.target.value;
+      if (this.activeVar === "SolarRadiation") {
+        await this.ensureSolarData();
+      }
       this.render();
       this.app.updateLegend(this.getActiveVarDef());
     };
@@ -237,23 +240,21 @@ export const tabObservation = {
   async loadData() {
     this.app.showLoader("正在下載即時觀測資料...");
     try {
-      const jMeteo = await CWA_API.get10MinObservations();
-      const jRain = await CWA_API.getRainfallObservations().catch(() => null);
-      const jSolar = await CWA_API.getSolarRadiation().catch(() => null);
-      const jUV = await CWA_API.getUVIndex().catch(() => null);
-      
-      this.stationsData = jMeteo?.records?.Station || [];
-      this.rainData = jRain?.records?.Station || [];
-      this.uvData = jUV?.records?.Station || [];
-      
-      // Solar Station details
-      let solSt = jSolar?.cwaopendata?.dataset?.Station
-               || jSolar?.cwaopendata?.resources?.resource?.data?.Station
-               || jSolar?.records?.Station
-               || [];
-      if (solSt && !Array.isArray(solSt)) solSt = [solSt];
-      this.solarData = solSt || [];
-      
+      // 平行抓取（比逐一 await 快 3 倍）；日射量為 fileapi，改為選用時才載入
+      const [rMeteo, rRain, rUV] = await Promise.allSettled([
+        CWA_API.get10MinObservations(),
+        CWA_API.getRainfallObservations(),
+        CWA_API.getUVIndex()
+      ]);
+
+      if (rMeteo.status === "rejected") {
+        throw new Error(rMeteo.reason?.message || "無法取得測站觀測資料");
+      }
+
+      this.stationsData = rMeteo.value?.records?.Station || [];
+      this.rainData = (rRain.status === "fulfilled" ? rRain.value?.records?.Station : null) || [];
+      this.uvData = (rUV.status === "fulfilled" ? rUV.value?.records?.Station : null) || [];
+
       // Update global header time
       if (this.stationsData.length > 0) {
         const obsT = this.stationsData[0]?.ObsTime?.DateTime;
@@ -263,7 +264,27 @@ export const tabObservation = {
       }
     } catch (e) {
       console.error(e);
-      alert("載入觀測資料失敗: " + e.message);
+      this.app.showToast("載入觀測資料失敗：" + e.message, "error");
+    } finally {
+      this.app.hideLoader();
+    }
+  },
+
+  // 日射量（fileapi）採延遲載入：使用者選了「日射量」變數才抓
+  async ensureSolarData() {
+    if (this.solarData.length > 0) return;
+    this.app.showLoader("正在下載日射量觀測資料...");
+    try {
+      const jSolar = await CWA_API.getSolarRadiation();
+      let solSt = jSolar?.cwaopendata?.dataset?.Station
+               || jSolar?.cwaopendata?.resources?.resource?.data?.Station
+               || jSolar?.records?.Station
+               || [];
+      if (solSt && !Array.isArray(solSt)) solSt = [solSt];
+      this.solarData = solSt || [];
+    } catch (e) {
+      console.error(e);
+      this.app.showToast("日射量資料暫時無法取得（File API 可能受瀏覽器 CORS 限制）", "warn");
     } finally {
       this.app.hideLoader();
     }
@@ -472,7 +493,7 @@ export const tabObservation = {
       `;
     } catch (e) {
       console.error(e);
-      statusInfo.textContent = "載入格點失敗: " + e.message;
+      statusInfo.textContent = "載入格點失敗：" + e.message + "（File API 由 S3 供檔，瀏覽器可能因 CORS 限制無法取得）";
     }
   },
   
@@ -587,7 +608,10 @@ export const tabObservation = {
       overlay.addTo(this.layerClouds);
     } catch (e) {
       console.error(e);
-      alert("載入衛星雲圖失敗: " + e.message);
+      this.app.showToast("衛星雲圖暫時無法取得（File API 可能受瀏覽器 CORS 限制）", "warn");
+      document.getElementById("cloud-sel").value = "";
+      this.activeCloud = "";
+      opGroup.style.display = "none";
     } finally {
       this.app.hideLoader();
     }

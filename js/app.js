@@ -105,19 +105,24 @@ class App {
     const inp = document.getElementById("gate-key-input");
     const submit = document.getElementById("gate-enter-btn");
     const err = document.getElementById("gate-key-err");
-    
-    // Check if current key is valid
+
+    // 驗證結果三態："ok" 直接進入；"network"（斷線/CORS/逾時）也放行，
+    // 由各分頁自行顯示錯誤 — 避免 GitHub Pages 上因單一驗證請求失敗而整頁卡死；
+    // 只有 "invalid"（金鑰確定無效）才顯示輸入閘。
     this.showLoader("正在驗證授權金鑰...");
-    const valid = await validateApiKey(KEY);
+    const state = await validateApiKey(KEY);
     this.hideLoader();
-    
-    if (valid) {
+
+    if (state !== "invalid") {
       gate.style.display = "none";
+      if (state === "network") {
+        this.showToast("暫時無法連線氣象署伺服器，資料載入可能失敗", "warn");
+      }
       this.startApp();
     } else {
       gate.style.display = "flex";
       inp.value = KEY || "";
-      
+
       submit.onclick = async () => {
         const k = inp.value.trim();
         if (!k) {
@@ -125,12 +130,12 @@ class App {
           err.style.display = "block";
           return;
         }
-        
+
         this.showLoader("正在驗證金鑰...");
-        const ok = await validateApiKey(k);
+        const s = await validateApiKey(k);
         this.hideLoader();
-        
-        if (ok) {
+
+        if (s !== "invalid") {
           setApiKey(k);
           gate.style.display = "none";
           this.startApp();
@@ -180,7 +185,7 @@ class App {
       this.map.invalidateSize();
     } catch (e) {
       console.error(e);
-      alert(`載入 ${tab.name} 失敗: ` + e.message);
+      this.showToast(`載入 ${tab.name} 失敗：${e.message}`, "error");
     } finally {
       this.hideLoader();
     }
@@ -200,6 +205,23 @@ class App {
   
   hideLoader() {
     document.getElementById("loader-overlay").style.display = "none";
+  }
+
+  // 非阻塞式提示（取代 alert，避免中斷操作）
+  showToast(msg, type = "info", ms = 6000) {
+    let box = document.getElementById("toast-box");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "toast-box";
+      box.style.cssText = "position:fixed; bottom:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:8px; max-width:340px;";
+      document.body.appendChild(box);
+    }
+    const colors = { info: "#00b0ff", warn: "#ffb300", error: "#ff5252" };
+    const el = document.createElement("div");
+    el.style.cssText = `background:rgba(11,19,36,0.95); color:#e2ebf6; border:1px solid ${colors[type] || colors.info}; border-left:4px solid ${colors[type] || colors.info}; border-radius:8px; padding:10px 14px; font-size:12.5px; line-height:1.5; box-shadow:0 4px 16px rgba(0,0,0,0.4);`;
+    el.textContent = msg;
+    box.appendChild(el);
+    setTimeout(() => el.remove(), ms);
   }
   
   updateObsTime(timeStr) {
@@ -254,8 +276,15 @@ class App {
   }
 }
 
-// Instantiate and start app on page load
-window.onload = () => {
-  const app = new App();
+// 直接啟動：ES module 具 defer 特性，執行時 DOM 已解析完成。
+// 不可使用 window.onload — 只要任一 CDN 資源（字型/圖磚）載入緩慢或被阻擋，
+// load 事件就會被延遲甚至不觸發，導致 GitHub Pages 上整頁空白。
+const app = new App();
+window.cwaApp = app; // 方便除錯
+try {
   app.init();
-};
+} catch (e) {
+  console.error("初始化失敗", e);
+  document.body.insertAdjacentHTML("beforeend",
+    `<div style="position:fixed;inset:auto 16px 16px 16px;background:#3a0d0d;color:#ffbaba;padding:12px 16px;border-radius:8px;z-index:99999;font-size:13px;">儀表板初始化失敗：${e.message}</div>`);
+}

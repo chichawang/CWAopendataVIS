@@ -101,27 +101,67 @@ export const tabMarine = {
     };
   },
   
+  // 將 O-B0075-001 的單筆觀測時間轉為統一格式
+  parseObsTime(item) {
+    const w = item.WeatherElements || item.weatherElements || {};
+    const a = w.PrimaryAnemometer || w.primaryAnemometer || {};
+    return {
+      t: item.DateTime || item.dateTime,
+      TideHeight: num(w.TideHeight),
+      WaveHeight: num(w.WaveHeight),
+      WavePeriod: num(w.WavePeriod),
+      WaveDirection: num(w.WaveDirection),
+      SeaTemperature: num(w.SeaTemperature),
+      WindSpeed: num(a.WindSpeed),
+      WindDirection: num(a.WindDirection),
+      StationPressure: num(w.StationPressure)
+    };
+  },
+
+  // O-B0075-001 實際格式：Records.SeaSurfaceObs.Location[]，每筆 Station.StationID
+  extractObsLocations(jObs) {
+    return jObs?.Records?.SeaSurfaceObs?.Location
+        || jObs?.records?.SeaSurfaceObs?.Location
+        || [];
+  },
+
   async loadData() {
     this.app.showLoader("正在下載海象實時數據與測站資訊...");
     try {
-      const jMeta = await CWA_API.getMarineMetadata();
-      const jObs = await CWA_API.getMarineObservations();
-      
-      const stationsMeta = jMeta?.cwaopendata?.resources?.resource?.data?.Station || [];
-      const obsRecords = jObs?.records?.Station || [];
-      
+      // 測站座標來自 File API（S3 供檔，瀏覽器可能因 CORS 失敗）→ 允許降級
+      // 最新觀測只抓過去 3 小時快照（~80KB），48h 序列改為點站後才載入
+      const [rMeta, rObs] = await Promise.allSettled([
+        CWA_API.getMarineMetadata(),
+        CWA_API.getMarineLatestObs()
+      ]);
+
+      if (rObs.status === "rejected") {
+        throw new Error(rObs.reason?.message || "無法取得海象觀測資料");
+      }
+
+      const jMeta = rMeta.status === "fulfilled" ? rMeta.value : null;
+      this.metaFailed = rMeta.status === "rejected";
+
+      let stationsMeta = jMeta?.cwaopendata?.resources?.resource?.data?.Station
+                      || jMeta?.cwaopendata?.dataset?.Station
+                      || [];
+      if (stationsMeta && !Array.isArray(stationsMeta)) stationsMeta = [stationsMeta];
+
+      const obsLocations = this.extractObsLocations(rObs.value);
+
       this.stations = {};
-      
-      // Parse metadata
+
+      // Parse metadata（座標與站名）
       stationsMeta.forEach(m => {
-        const id = m.StationId;
+        const id = m.StationID || m.StationId;
+        if (!id) return;
         this.stations[id] = {
           id: id,
-          name: m.StationName,
-          lat: parseFloat(m.StationLatitude),
-          lon: parseFloat(m.StationLongitude),
-          type: m.StationAttribute === "浮標" ? "buoy" : "tide",
-          county: m.County || "臺灣海域",
+          name: m.StationName || m.StationNameEN || id,
+          lat: parseFloat(m.StationLatitude || m.Latitude),
+          lon: parseFloat(m.StationLongitude || m.Longitude),
+          type: (m.StationAttribute || m.StationType || "").includes("潮位") ? "tide" : "buoy",
+          county: m.County || m.CountyName || "臺灣海域",
           obs: [],
           latest: {},
           health: "offline",
@@ -129,18 +169,18 @@ export const tabMarine = {
           alertMsgs: []
         };
       });
-      
-      // Parse observations (48 hours series)
-      obsRecords.forEach(o => {
-        const id = o.StationId;
+
+      // Parse latest observations（3 小時快照）
+      obsLocations.forEach(o => {
+        const id = o.Station?.StationID || o.StationID || o.StationId;
+        if (!id) return;
         if (!this.stations[id]) {
-          // In case metadata lacks this station
           this.stations[id] = {
             id: id,
-            name: o.StationName,
-            lat: parseFloat(o.StationLatitude || o.GeoInfo?.Coordinates?.[0]?.StationLatitude),
-            lon: parseFloat(o.StationLongitude || o.GeoInfo?.Coordinates?.[0]?.StationLongitude),
-            type: o.StationName?.includes("潮位") ? "tide" : "buoy",
+            name: id, // metadata 失敗時暫以站碼為名
+            lat: NaN,
+            lon: NaN,
+            type: "buoy",
             county: "臺灣海域",
             obs: [],
             latest: {},
@@ -149,35 +189,32 @@ export const tabMarine = {
             alertMsgs: []
           };
         }
-        
+
         const st = this.stations[id];
         const rawObsList = arr(o.StationObsTimes?.StationObsTime || o.stationObsTimes?.stationObsTime);
-        
-        st.obs = rawObsList.map(item => {
-          const w = item.WeatherElements || item.weatherElements || {};
-          const a = w.PrimaryAnemometer || w.primaryAnemometer || {};
-          return {
-            t: item.DateTime || item.dateTime,
-            TideHeight: num(w.TideHeight),
-            WaveHeight: num(w.WaveHeight),
-            WavePeriod: num(w.WavePeriod),
-            WaveDirection: num(w.WaveDirection),
-            SeaTemperature: num(w.SeaTemperature),
-            WindSpeed: num(a.WindSpeed),
-            WindDirection: num(a.WindDirection),
-            StationPressure: num(w.StationPressure)
-          };
-        }).sort((a, b) => new Date(a.t) - new Date(b.t));
-        
-        if (st.obs.length > 0) {
-          st.latest = st.obs[st.obs.length - 1];
+        const parsed = rawObsList.map(item => this.parseObsTime(item))
+          .sort((a, b) => new Date(a.t) - new Date(b.t));
+
+        if (parsed.length > 0) {
+          st.latest = parsed[parsed.length - 1];
           st.latestT = st.latest.t;
+          // 依最新值推斷潮位站（有潮高、無波高）
+          if (st.latest.TideHeight !== null && st.latest.WaveHeight === null) st.type = "tide";
         }
-        
-        // Calculate health status
         this.evaluateStationHealth(st);
       });
-      
+
+      // 移除完全沒有觀測資料的 metadata 站（避免地圖充滿離線點）
+      Object.keys(this.stations).forEach(id => {
+        if (!this.stations[id].latestT && !this.stations[id].alertMsgs.length) {
+          delete this.stations[id];
+        }
+      });
+
+      if (this.metaFailed) {
+        this.app.showToast("海象測站座標檔暫時無法取得（CORS 限制），改以列表模式顯示", "warn");
+      }
+
       // Update global header time
       const times = Object.values(this.stations).map(s => s.latestT).filter(Boolean);
       if (times.length > 0) {
@@ -186,9 +223,26 @@ export const tabMarine = {
       }
     } catch (e) {
       console.error(e);
-      alert("載入海象資料失敗: " + e.message);
+      this.app.showToast("載入海象資料失敗：" + e.message, "error");
     } finally {
       this.app.hideLoader();
+    }
+  },
+
+  // 點選測站後才載入該站 48h 歷史序列（單站 ~90KB）
+  async ensureStation48h(st) {
+    if (st.obs.length > 5) return;
+    try {
+      const j = await CWA_API.getMarineStation48h(st.id);
+      const locs = this.extractObsLocations(j);
+      const rec = locs.find(o => (o.Station?.StationID || o.StationID) === st.id) || locs[0];
+      if (rec) {
+        const raw = arr(rec.StationObsTimes?.StationObsTime || rec.stationObsTimes?.stationObsTime);
+        st.obs = raw.map(item => this.parseObsTime(item))
+          .sort((a, b) => new Date(a.t) - new Date(b.t));
+      }
+    } catch (e) {
+      console.error("載入 48h 歷史序列失敗", e);
     }
   },
   
@@ -254,7 +308,10 @@ export const tabMarine = {
       if (this.filterStatus !== "all" && this.filterStatus !== st.health && !(this.filterStatus === "alert" && st.alertState !== "none")) {
         return;
       }
-      
+
+      // metadata 失敗時該站無座標 → 不畫地圖標記（側欄列表仍可點選）
+      if (!isFinite(st.lat) || !isFinite(st.lon)) return;
+
       const ll = [st.lat, st.lon];
       const val = st.latest[activeVarKey];
       
@@ -387,6 +444,23 @@ export const tabMarine = {
         ⬅ 點選地圖海象測站或藍色公路航線，查看 48h 實時趨勢與預報指標
       </div>
     `;
+
+    // 座標檔（File API）失敗時的降級：以清單方式列出測站供點選
+    if (!this.selectedStationId && !this.selectedRouteId && this.metaFailed) {
+      const listItems = Object.values(this.stations)
+        .sort((a, b) => (a.name > b.name ? 1 : -1))
+        .map(st => `
+          <div class="marine-list-item" data-stid="${st.id}" style="display:flex; justify-content:space-between; padding:6px 8px; border-bottom:1px dashed var(--border); cursor:pointer; font-size:12px;">
+            <span>${st.type === "buoy" ? "⚓" : "📏"} ${st.name}</span>
+            <span style="color:var(--muted);">${st.latest.WaveHeight !== null && st.latest.WaveHeight !== undefined ? st.latest.WaveHeight.toFixed(1) + " m" : (st.latest.TideHeight !== null && st.latest.TideHeight !== undefined ? st.latest.TideHeight.toFixed(2) + " m" : "—")}</span>
+          </div>`).join("");
+      mainContentHtml = `
+        <div class="panel-section">
+          <h3>📋 海象測站列表（座標檔暫無法取得）</h3>
+          <div style="max-height:300px; overflow-y:auto;">${listItems}</div>
+        </div>
+      `;
+    }
     
     if (this.selectedStationId && this.stations[this.selectedStationId]) {
       const st = this.stations[this.selectedStationId];
@@ -419,7 +493,7 @@ export const tabMarine = {
               <div class="kpi-num" style="font-size: 16px; color: #b388ff;">${pressure}</div>
             </div>
           </div>
-          <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">測站位置: (${st.lat.toFixed(3)}°N, ${st.lon.toFixed(3)}°E) ‧ 更新於 ${st.latestT ? new Date(st.latestT).toLocaleTimeString("zh-TW") : "—"}</div>
+          <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">測站位置: ${isFinite(st.lat) ? `(${st.lat.toFixed(3)}°N, ${st.lon.toFixed(3)}°E)` : "（座標暫無法取得）"} ‧ 更新於 ${st.latestT ? new Date(st.latestT).toLocaleTimeString("zh-TW") : "—"}</div>
         </div>
         
         <div class="panel-section">
@@ -491,9 +565,21 @@ export const tabMarine = {
     bindKpi("kpi-off", "offline");
     bindKpi("kpi-alrt", "alert");
     
-    // Render chart if station selected
+    // 綁定降級列表點選
+    this.panel.querySelectorAll(".marine-list-item").forEach(el => {
+      el.onclick = () => {
+        this.selectedStationId = el.dataset.stid;
+        this.selectedRouteId = null;
+        this.renderSidePanel();
+      };
+    });
+
+    // Render chart if station selected（48h 序列延遲載入，載完再畫圖）
     if (this.selectedStationId) {
-      this.renderMarineChart();
+      const st = this.stations[this.selectedStationId];
+      if (st) {
+        this.ensureStation48h(st).then(() => this.renderMarineChart());
+      }
     }
     
     // Bind ship assessment variables

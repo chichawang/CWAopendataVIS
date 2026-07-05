@@ -61,7 +61,7 @@ CWAdataVIS/
 │   └── main.css                # 統一的 Glassmorphism UI 樣式表
 ├── js/
 │   ├── app.js                  # 核心控制器（路由、地圖初始化與切換）
-│   ├── api.js                  # API 統一管理與瀏覽器快取 (TTL 3分鐘)
+│   ├── api.js                  # API 統一管理（記憶體+localStorage 雙層快取、請求去重、逾時控制）
 │   ├── utils.js                # 連續/離散色階著色、風向量 SVG、天文軌跡算法
 │   ├── tab_observation.js      # Tab 1: 觀測、格點 Canvas 疊加與衛星雲圖
 │   ├── tab_forecast.js         # Tab 2: 天氣/颱風預報、警特報、健康預警
@@ -94,6 +94,10 @@ CWAdataVIS/
    - 在 **Branch** 下拉選單選擇 `main` 分支與 `/ (root)` 資料夾，然後點選 **Save**。
 3. **完成部署**：
    - 等待約 1-2 分鐘，GitHub 會自動在頁面頂端生成您的專案網址（格式通常為 `https://您的帳號.github.io/CWAdataVIS/`）。
+
+> ⚠️ **常見部署失敗原因**：`index.html` 必須位於**儲存庫根目錄**。若解壓縮後將整個資料夾推上去（變成 `repo/CWAdataVIS-main/index.html`），Pages 網址只會顯示 404 或 README。
+>
+> ⚠️ **File API 限制**：`fileapi` 資料集（雷達格點、衛星雲圖、日射量、海象測站座標、天文日曆）由 S3 供檔，瀏覽器可能因 CORS 無法取得；本系統已對這些圖層優雅降級（顯示提示、不影響其它功能）。REST datastore API 支援 CORS，所有核心功能均正常。
 
 ---
 

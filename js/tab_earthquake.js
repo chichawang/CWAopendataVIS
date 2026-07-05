@@ -110,7 +110,7 @@ export const tabEarthquake = {
       }
     } catch (e) {
       console.error(e);
-      alert("載入地震報告失敗: " + e.message);
+      this.app.showToast("載入地震報告失敗：" + e.message, "error");
     } finally {
       this.app.hideLoader();
     }
