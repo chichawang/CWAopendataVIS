@@ -1,13 +1,16 @@
 // ===== CWA Dashboard Core Controller (js/app.js) =====
 
+// 注意：api.js / utils.js 的 import 全專案都「不加版本參數」，
+// 確保所有模組共用同一個實例（模組身分以完整 URL 判定）。
+// tab 模組加 ?v= 以繞過 GitHub Pages CDN 的 10 分鐘快取。
 import { KEY, validateApiKey, setApiKey } from "./api.js";
 import { gradientCSS } from "./utils.js";
-import { tabObservation } from "./tab_observation.js";
-import { tabForecast } from "./tab_forecast.js";
-import { tabMarine } from "./tab_marine.js";
-import { tabEarthquake } from "./tab_earthquake.js";
-import { tabRecreation } from "./tab_recreation.js";
-import { tabAstronomy } from "./tab_astronomy.js";
+import { tabObservation } from "./tab_observation.js?v=2";
+import { tabForecast } from "./tab_forecast.js?v=2";
+import { tabMarine } from "./tab_marine.js?v=2";
+import { tabEarthquake } from "./tab_earthquake.js?v=2";
+import { tabRecreation } from "./tab_recreation.js?v=2";
+import { tabAstronomy } from "./tab_astronomy.js?v=2";
 
 class App {
   constructor() {
